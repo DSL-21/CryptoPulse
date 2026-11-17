@@ -22,29 +22,40 @@ import com.dsl21.cryptopulse.data.MarketSnapshot
 import com.dsl21.cryptopulse.data.ScannerEngine
 import com.dsl21.cryptopulse.data.ScannerSignal
 import com.dsl21.cryptopulse.data.SignalDirection
+import com.dsl21.cryptopulse.ui.components.MetricCard
 import com.dsl21.cryptopulse.ui.components.SectionTitle
 
 @Composable
 fun ScannerScreen(snapshot: MarketSnapshot) {
-    val signals = ScannerEngine.buildSignals(snapshot.quotes)
+    val signals = ScannerEngine.buildSignals(snapshot.quotes, snapshot.hourlyVolumePulses)
+    val bullish = signals.count { it.direction == SignalDirection.BULLISH }
+    val bearish = signals.count { it.direction == SignalDirection.BEARISH }
+    val neutral = signals.count { it.direction == SignalDirection.NEUTRAL }
+
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            SectionTitle("Smart scanner", signals.size.toString() + " observations")
+            SectionTitle("Market scanner", signals.size.toString() + " observations")
             Text(
-                "Rule-based market filters using public 24h exchange statistics. Signals describe market conditions; they are not trading advice.",
+                "Transparent, rule-based market observations from public exchange data. Signals are not predictions, buy/sell recommendations, or proof that a token is safe.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(bottom = 8.dp)
+                style = MaterialTheme.typography.bodySmall
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
+                MetricCard("BULLISH", bullish.toString(), "Strong price moves", Modifier.weight(1f))
+                MetricCard("BEARISH", bearish.toString(), "Strong negative moves", Modifier.weight(1f))
+                MetricCard("ACTIVITY", neutral.toString(), "Volume and range", Modifier.weight(1f))
+            }
+            SectionTitle("Detected conditions", "Live snapshot rules")
         }
+
         if (signals.isEmpty()) {
             item {
                 Text(
-                    "No scanner observations yet. Market data will appear here after the first successful refresh.",
+                    "No conditions currently match the scanner thresholds.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 20.dp)
                 )
@@ -54,9 +65,15 @@ fun ScannerScreen(snapshot: MarketSnapshot) {
                 SignalCard(signal)
             }
         }
+
         item {
+            SectionTitle("Scanner rules")
+            RuleInfo("Momentum", "At least +4% or -4% over the reporting window supplied by the primary exchange.")
+            RuleInfo("Reported volume", "At least 100 million quote-currency units in the exchange's reported 24-hour volume.")
+            RuleInfo("Wide range", "Reported 24-hour high-to-low range is at least 7% of the current price.")
+            RuleInfo("Hourly volume spike", "Last completed Binance 1h candle is at least 2.5× the average of the previous 24 completed hourly candles, with at least 100,000 USDT traded.")
             Text(
-                "Current v0.1 rules: 24h move ≥ 4%, 24h quote volume ≥ 100M, or a 24h high-to-low range ≥ 7%. Thresholds are intentionally transparent.",
+                "Volume spikes update approximately every five minutes. Kraken's percentage is explicitly labelled UTC-day change; the main tracked USDT sample is sourced from Binance's rolling 24h ticker.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(top = 8.dp, bottom = 18.dp)
@@ -72,6 +89,7 @@ private fun SignalCard(signal: ScannerSignal) {
         SignalDirection.BEARISH -> Color(0xFFFF7185)
         SignalDirection.NEUTRAL -> Color(0xFF8BAEFF)
     }
+
     Card(
         shape = RoundedCornerShape(17.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF101C2D))
@@ -91,7 +109,20 @@ private fun SignalCard(signal: ScannerSignal) {
                 )
             }
             Text(signal.title, color = accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 7.dp))
-            Text(signal.detail, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+            Text(
+                signal.detail,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
         }
+    }
+}
+
+@Composable
+private fun RuleInfo(title: String, detail: String) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(title, fontWeight = FontWeight.SemiBold)
+        Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
 }
