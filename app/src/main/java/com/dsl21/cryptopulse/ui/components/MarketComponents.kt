@@ -80,17 +80,26 @@ fun AssetRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier.background(Color(0xFF1B2C42), RoundedCornerShape(13.dp)).padding(horizontal = 10.dp, vertical = 9.dp),
+                modifier = Modifier
+                    .background(Color(0xFF1B2C42), RoundedCornerShape(13.dp))
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(quote.asset.symbol.take(1), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(quote.asset.symbol, fontWeight = FontWeight.Bold)
-                Text(quote.asset.name, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                Text(
+                    quote.asset.name + " · " + quote.primary.exchange,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(formatPrice(quote.primary.lastPrice), fontWeight = FontWeight.SemiBold)
+                Text(
+                    formatPrice(quote.primary.lastPrice) + " " + quote.primary.quoteCurrency,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Text(
                     String.format(Locale.US, "%+.2f%%", change),
                     color = movementColor,
