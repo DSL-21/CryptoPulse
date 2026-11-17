@@ -6,14 +6,25 @@ CryptoPulse combines public centralized-exchange market data, a transparent mark
 
 ## Stable release
 
-**Version:** 1.0.0  
+**Version:** 1.0.1  
 **Application ID:** `com.dsl21.cryptopulse`  
 **Minimum Android:** 8.0 (API 26)  
 **Target Android:** API 36
 
-Download the APK and SHA-256 checksum from [GitHub Releases](https://github.com/DSL-21/CryptoPulse/releases/latest).
+Download the optimized APK and SHA-256 checksum from [GitHub Releases](https://github.com/DSL-21/CryptoPulse/releases/latest).
 
-> The release APK is debug-signed for direct installation. It is suitable for sideloading and testing, but it is not a Play Store production-signed package. GitHub Actions uses an ephemeral debug signing key, so installing a future build over this copy may require uninstalling the previous version first.
+> The release is a non-debuggable, minified Android release variant. It is currently signed with the CI runner's temporary Android debug certificate because no persistent production keystore is configured. This is for sideload testing, not Play Store distribution. A later CI build may require uninstalling the current copy before updating because the signing key is ephemeral.
+
+## Security hardening in 1.0.1
+
+- HTTPS-only public API requests restricted to exact host allowlists.
+- HTTP redirects are rejected rather than followed.
+- Network connections have bounded connect/read timeouts and JSON response bodies are limited to 2 MiB.
+- DEX chain identifiers and token addresses are validated before becoming URL path segments.
+- External DEX pair links must use the canonical `https://dexscreener.com` hostname.
+- The release variant enables R8 minification and resource shrinking.
+- CI verifies that the packaged APK is signed and not debuggable.
+- GitHub Actions are pinned to full commit SHAs; Dependabot and CodeQL checks are configured.
 
 ## Features
 
@@ -62,20 +73,24 @@ See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for endpoint details, limits an
 
 ## Build from source
 
-Requirements: JDK 17, Android SDK Platform 36 and Build Tools 36.0.0. Gradle 8.13 is used by the CI workflow and can be installed through Android Studio or Gradle's official distribution.
+Requirements: JDK 17, Android SDK Platform 36 and Build Tools 36.0.0. Gradle 8.13 is used by CI.
 
 Build:
 ```bash
-gradle --no-daemon lintDebug testDebugUnitTest assembleDebug
+gradle --no-daemon lintDebug lintRelease testDebugUnitTest assembleDebug assembleRelease
 ```
 
-APK output: `app/build/outputs/apk/debug/app-debug.apk`.
+APK output: `app/build/outputs/apk/release/app-release.apk`.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the reporting policy and security scope. CI checks include Android lint, unit tests and CodeQL; they are not a substitute for an independent mobile application penetration test.
 
 ## Known limitations
 - Kraken's percentage is change since UTC day open, not a rolling 24-hour return; its quote-notional volume is estimated.
-- USD and USDT stay separate; exchange volumes are not combined into total-market volume.
+- USD and USDT stay separate; exchange volumes are venue-specific.
 - DEX discovery is limited to recent profiles.
 - Price alerts are checked while the app is open.
-- GitHub APK is debug-signed, not Play Store production-signed.
+- The current sideload APK does not use a persistent Play Store signing key.
 
 MIT License.

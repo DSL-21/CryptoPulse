@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dsl21.cryptopulse.data.DexPair
+import com.dsl21.cryptopulse.data.isSafeDexScreenerUrl
 import com.dsl21.cryptopulse.ui.components.MetricCard
 import com.dsl21.cryptopulse.ui.components.SectionTitle
 import com.dsl21.cryptopulse.ui.components.formatPrice
@@ -130,10 +131,11 @@ private fun DexPairCard(pair: DexPair) {
     }
     val change = pair.changeH1
     val changeColor = if ((change ?: 0.0) >= 0.0) Color(0xFF62E6B5) else Color(0xFFFF7185)
+    val safeExternalUrl = isSafeDexScreenerUrl(pair.dexUrl)
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable {
-            if (pair.dexUrl.startsWith("https://")) runCatching { uriHandler.openUri(pair.dexUrl) }
+        modifier = Modifier.fillMaxWidth().clickable(enabled = safeExternalUrl) {
+            runCatching { uriHandler.openUri(pair.dexUrl) }
         },
         shape = RoundedCornerShape(17.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF101C2D))

@@ -8,9 +8,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
-import java.nio.charset.StandardCharsets
 
 class DexScreenerRepository {
 
@@ -59,7 +56,10 @@ class DexScreenerRepository {
             val item = json.optJSONObject(index) ?: continue
             val chainId = item.optString("chainId").trim()
             val tokenAddress = item.optString("tokenAddress").trim()
-            if (chainId.isBlank() || tokenAddress.isBlank()) continue
+
+            // These values become URL path segments below. Reject URL syntax before it
+            // can influence the request path; do not try to sanitize it after interpolation.
+            if (!isValidDexChainId(chainId) || !isValidDexTokenAddress(tokenAddress)) continue
 
             val key = chainId + ":" + tokenAddress.lowercase()
             if (seen.add(key)) {
@@ -68,11 +68,15 @@ class DexScreenerRepository {
             if (profiles.size >= MAX_PROFILES) break
         }
 
-        if (profiles.isEmpty()) throw IOException("DEX Screener returned no recent token profiles")
+        if (profiles.isEmpty()) throw IOException("DEX Screener returned no valid recent token profiles")
         return profiles
     }
 
     private fun fetchBestPair(profile: TokenProfile): DexPair? {
+        if (!isValidDexChainId(profile.chainId) ||
+            !isValidDexTokenAddress(profile.tokenAddress)
+        ) return null
+
         val url = "https://api.dexscreener.com/token-pairs/v1/" +
             profile.chainId + "/" + profile.tokenAddress
         val json = JSONArray(requestText(url))
@@ -123,29 +127,8 @@ class DexScreenerRepository {
         return candidates.maxByOrNull { it.liquidityUsd ?: 0.0 }
     }
 
-    private fun requestText(url: String): String {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 12_000
-        connection.readTimeout = 12_000
-        connection.instanceFollowRedirects = true
-        connection.setRequestProperty("Accept", "application/json")
-        connection.setRequestProperty("User-Agent", "CryptoPulse-Android/1.0.0")
-
-        try {
-            val status = connection.responseCode
-            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (status !in 200..299) {
-                throw IOException(
-                    "HTTP " + status + " from " + URL(url).host + ": " + body.take(160)
-                )
-            }
-            return body
-        } finally {
-            connection.disconnect()
-        }
-    }
+    private fun requestText(url: String): String =
+        SecureHttp.getJson(url, setOf("api.dexscreener.com"))
 
     private fun JSONObject.number(key: String): Double? =
         optString(key).toDoubleOrNull()?.takeIf { it.isFinite() }
