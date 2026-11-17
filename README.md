@@ -25,6 +25,7 @@ Download the optimized APK and SHA-256 checksum from [GitHub Releases](https://g
 - The release variant enables R8 minification and resource shrinking.
 - CI verifies that the packaged APK is signed and not debuggable.
 - GitHub Actions are pinned to full commit SHAs; Dependabot and CodeQL checks are configured.
+- Build tooling is aligned to Android Gradle Plugin 9.3.1 and Gradle 9.7.0.
 
 ## Features
 
@@ -73,7 +74,7 @@ See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for endpoint details, limits an
 
 ## Build from source
 
-Requirements: JDK 17, Android SDK Platform 36 and Build Tools 36.0.0. Gradle 8.13 is used by CI.
+Requirements: JDK 17, Android SDK Platform 36 and Build Tools 36.0.0. Android Gradle Plugin 9.3.1 and Gradle 9.7.0 are used by CI.
 
 Build:
 ```bash
