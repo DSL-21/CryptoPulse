@@ -68,7 +68,11 @@ fun AssetDetailScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.padding(top = 4.dp)
             ) {
-                Text(formatPrice(primary.lastPrice), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    formatPrice(primary.lastPrice) + " " + primary.quoteCurrency,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
                 Text(
                     String.format(Locale.US, "%+.2f%%", primary.changePercent24h),
                     color = movementColor,
@@ -76,12 +80,25 @@ fun AssetDetailScreen(
                     modifier = Modifier.padding(bottom = 3.dp)
                 )
             }
+            Text(
+                "Primary source: " + primary.exchange + " · " + primary.changeWindowLabel + " change",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
             Spacer(Modifier.height(18.dp))
-            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF101C2D))) {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF101C2D))
+            ) {
                 Column(Modifier.fillMaxWidth().padding(15.dp)) {
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Text("48-hour price history", fontWeight = FontWeight.SemiBold)
-                        Text(if (isLoadingHistory) "Loading…" else "48 × 1h", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            if (isLoadingHistory) "Loading…" else "48 × 1h · Binance",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall
+                        )
                     }
                     MiniLineChart(
                         values = history,
@@ -89,22 +106,32 @@ fun AssetDetailScreen(
                         lineColor = movementColor
                     )
                     if (history.isEmpty() && !isLoadingHistory) {
-                        Text("Hourly history is not available right now.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "Hourly history is not available right now.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
             }
-            SectionTitle("24-hour statistics", primary.exchange)
+            SectionTitle("Reported 24-hour range", primary.exchange)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatTile("HIGH", formatPrice(primary.high24h), Modifier.weight(1f))
-                StatTile("LOW", formatPrice(primary.low24h), Modifier.weight(1f))
+                StatTile("HIGH", formatPrice(primary.high24h) + " " + primary.quoteCurrency, Modifier.weight(1f))
+                StatTile("LOW", formatPrice(primary.low24h) + " " + primary.quoteCurrency, Modifier.weight(1f))
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatTile("QUOTE VOLUME", formatVolume(primary.quoteVolume24h) + " " + primary.quoteCurrency, Modifier.weight(1f))
-                StatTile("QUOTE", primary.quoteCurrency, Modifier.weight(1f))
+                val prefix = if (primary.quoteVolumeIsEstimate) "≈" else ""
+                StatTile(
+                    "QUOTE VOLUME",
+                    prefix + formatVolume(primary.quoteVolume24h) + " " + primary.quoteCurrency,
+                    Modifier.weight(1f)
+                )
+                StatTile("CHANGE WINDOW", primary.changeWindowLabel, Modifier.weight(1f))
             }
             SectionTitle("Exchange comparison", quote.exchanges.size.toString() + " source(s)")
         }
+
         items(quote.exchanges) { exchange ->
             Card(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -117,10 +144,14 @@ fun AssetDetailScreen(
                 ) {
                     Column {
                         Text(exchange.exchange, fontWeight = FontWeight.SemiBold)
-                        Text(exchange.quoteCurrency, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            exchange.quoteCurrency + " · " + exchange.changeWindowLabel,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall
+                        )
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(formatPrice(exchange.lastPrice), fontWeight = FontWeight.Bold)
+                        Text(formatPrice(exchange.lastPrice) + " " + exchange.quoteCurrency, fontWeight = FontWeight.Bold)
                         Text(
                             String.format(Locale.US, "%+.2f%%", exchange.changePercent24h),
                             color = if (exchange.changePercent24h >= 0) Color(0xFF62E6B5) else Color(0xFFFF7185),
@@ -130,9 +161,10 @@ fun AssetDetailScreen(
                 }
             }
         }
+
         item {
             Text(
-                "Exchange prices are not a consolidated index. USD and USDT quotes are displayed separately.",
+                "Prices and volumes are exchange-specific, not a consolidated index. USD and USDT quotes are intentionally displayed separately. Kraken's percent change is since UTC day open.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(vertical = 12.dp)
@@ -143,7 +175,11 @@ fun AssetDetailScreen(
 
 @Composable
 private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(15.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF101C2D))) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(15.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF101C2D))
+    ) {
         Column(Modifier.padding(13.dp)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, fontWeight = FontWeight.SemiBold)
