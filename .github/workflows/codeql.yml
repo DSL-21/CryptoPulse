@@ -62,4 +62,37 @@ jobs:
         run: gradle --no-daemon :app:compileDebugKotlin
 
       - name: Perform CodeQL analysis
+        id: codeql
         uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          output: ${{ runner.temp }}/codeql-sarif
+
+      - name: Print SARIF findings for review
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          SARIF_DIR="${RUNNER_TEMP}/codeql-sarif"
+          if [[ ! -d "$SARIF_DIR" ]]; then
+            echo "No SARIF output directory was produced."
+            exit 0
+          fi
+          mapfile -d '' SARIF_FILES < <(find "$SARIF_DIR" -type f -name '*.sarif' -print0)
+          if [[ ${#SARIF_FILES[@]} -eq 0 ]]; then
+            echo "No SARIF result files were produced."
+            exit 0
+          fi
+          for file in "${SARIF_FILES[@]}"; do
+            echo "Findings in $file:"
+            jq -r '
+              .runs[] as $run |
+              $run.results[]? |
+              [
+                (.ruleId // "unknown-rule"),
+                (.level // "unknown-level"),
+                (.message.text // "No message"),
+                (.locations[0].physicalLocation.artifactLocation.uri // "unknown-file"),
+                ((.locations[0].physicalLocation.region.startLine // 0) | tostring)
+              ] | @tsv
+            ' "$file"
+          done
