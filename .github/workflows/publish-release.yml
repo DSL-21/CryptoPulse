@@ -21,10 +21,10 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Check out release source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           distribution: temurin
           java-version: "17"
@@ -32,6 +32,7 @@ jobs:
       - name: Install Android SDK components
         shell: bash
         run: |
+          set -euo pipefail
           ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
@@ -43,14 +44,14 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          gradle-version: "8.13"
+          gradle-version: "9.7.0"
 
-      - name: Run lint, tests and assemble APKs
-        run: gradle --no-daemon lintDebug testDebugUnitTest assembleDebug assembleRelease
+      - name: Run lint, tests and optimized release build
+        run: gradle --no-daemon lintDebug lintRelease testDebugUnitTest assembleRelease
 
-      - name: Package APK, checksum and publish stable release
+      - name: Verify, checksum and publish optimized release APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -61,35 +62,69 @@ jobs:
             echo "Cannot determine application version" >&2
             exit 1
           fi
-          APK_NAME="cryptopulse-$VERSION_NAME-debug.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$APK_NAME"
+
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          if [[ ! -s "$APK_PATH" ]]; then
+            echo "Optimized release APK was not produced" >&2
+            exit 1
+          fi
+
+          APK_NAME="cryptopulse-$VERSION_NAME-release.apk"
+          cp "$APK_PATH" "$APK_NAME"
+
+          APKANALYZER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name apkanalyzer | sort -V | tail -n 1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          if [[ -z "$APKANALYZER" || -z "$APKSIGNER" ]]; then
+            echo "Android APK verification tools were not found" >&2
+            exit 1
+          fi
+
+          DEBUGGABLE="$("$APKANALYZER" manifest debuggable "$APK_NAME")"
+          if [[ "$DEBUGGABLE" != "false" ]]; then
+            echo "Refusing to publish an APK that is debuggable (value: $DEBUGGABLE)" >&2
+            exit 1
+          fi
+          "$APKSIGNER" verify --verbose "$APK_NAME"
           sha256sum "$APK_NAME" > "$APK_NAME.sha256"
+          sha256sum --check "$APK_NAME.sha256"
+
           RELEASE_TAG="v$VERSION_NAME"
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists; not replacing the published binary."
             exit 0
           fi
+
           NOTES_FILE="$RUNNER_TEMP/cryptopulse-release-notes.md"
           cat > "$NOTES_FILE" <<EOF
           ## CryptoPulse $VERSION_NAME
 
-          Stable Android release of CryptoPulse Market Intelligence.
+          Security-hardened Android release. This is an optimized, non-debuggable Android release variant.
+
+          ### Security changes
+          - HTTPS-only requests to exact public API host allowlists
+          - Automatic HTTP redirects disabled
+          - API response bodies capped at 2 MiB
+          - Bounded connection and read timeouts
+          - DEX chain/address values validated before being used in request paths
+          - DEX links restricted to the canonical dexscreener.com HTTPS hostname
+          - Release minification and resource shrinking enabled
+          - CI checks the APK signature and refuses a debuggable APK
 
           ### Included
           - Binance Spot and Kraken market overview with explicit quote-currency labels
           - Market heatmap, asset search, gainers and losers filters
-          - Transparent scanner for momentum, reported volume, range and relative hourly volume
-          - DEX Radar using public DEX Screener token profiles and pair liquidity/volume
+          - Transparent scanner for momentum, reported volume, range and hourly volume
+          - DEX Screener discovery feed
           - Revolut X public recent trades and BTC/USD order book
           - Asset detail and 48 hourly Binance closes
-          - Local watchlist and one-shot price alerts with Android notifications
+          - Local watchlist and one-shot price alerts
 
-          ### Data and feature limits
-          - No user account, personal API key, paid API or app-owned backend is required.
-          - USD and USDT quotes are not merged into a synthetic price.
-          - Kraken percentage is change since UTC day open; quote-volume notional is estimated.
-          - DEX Radar is a limited recent-profile sample, not a full index of every token or pool.
+          ### Signing and limitations
+          - This APK is signed with the CI runner's temporary Android debug certificate because no private production keystore has been configured.
+          - It is not Play Store production-signed. A future CI release may require uninstalling this copy before installing an update because the signing certificate is ephemeral.
           - Price alerts are evaluated while the app is open; background monitoring is not included.
-          - This APK is debug-signed for direct installation, not Play Store production-signed.
+          - USD and USDT quotes remain separate; Kraken percentage is UTC-day change and its notional volume is estimated.
+          - DEX Radar is a limited recent-profile sample, not a token-safety assessment.
           EOF
-          gh release create "$RELEASE_TAG" "$APK_NAME#CryptoPulse $VERSION_NAME (debug-signed APK)" "$APK_NAME.sha256#SHA-256 checksum" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "CryptoPulse $VERSION_NAME" --notes-file "$NOTES_FILE" --latest
+
+          gh release create "$RELEASE_TAG" "$APK_NAME#CryptoPulse $VERSION_NAME (optimized, non-debuggable APK)" "$APK_NAME.sha256#SHA-256 checksum" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "CryptoPulse $VERSION_NAME" --notes-file "$NOTES_FILE" --latest

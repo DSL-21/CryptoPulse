@@ -8,8 +8,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -270,34 +268,17 @@ class PublicMarketRepository {
         )
     }
 
-    private fun requestText(url: String): String {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 12_000
-        connection.readTimeout = 12_000
-        connection.instanceFollowRedirects = true
-        connection.setRequestProperty("Accept", "application/json")
-        connection.setRequestProperty("User-Agent", "CryptoPulse-Android/1.0.0")
-
-        try {
-            val status = connection.responseCode
-            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (status !in 200..299) {
-                throw IOException(
-                    "HTTP " + status + " from " + URL(url).host + ": " + body.take(160)
-                )
-            }
-            return body
-        } finally {
-            connection.disconnect()
-        }
-    }
+    private fun requestText(url: String): String = SecureHttp.getJson(url, API_HOSTS)
 
     private fun JSONObject.number(key: String): Double? =
         optString(key).toDoubleOrNull()?.takeIf { it.isFinite() }
 
     private companion object {
         const val VOLUME_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+        val API_HOSTS = setOf(
+            "data-api.binance.vision",
+            "api.kraken.com",
+            "revx.revolut.com"
+        )
     }
 }

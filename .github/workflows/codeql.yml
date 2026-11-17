@@ -1,0 +1,98 @@
+name: CodeQL Security Analysis
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  packages: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze Kotlin and Java
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          queries: security-extended
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Android sdkmanager not found"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: "9.7.0"
+
+      - name: Compile application for CodeQL
+        run: gradle --no-daemon :app:compileDebugKotlin
+
+      - name: Perform CodeQL analysis
+        id: codeql
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          output: ${{ runner.temp }}/codeql-sarif
+
+      - name: Print SARIF findings for review
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          SARIF_DIR="${RUNNER_TEMP}/codeql-sarif"
+          if [[ ! -d "$SARIF_DIR" ]]; then
+            echo "No SARIF output directory was produced."
+            exit 0
+          fi
+          mapfile -d '' SARIF_FILES < <(find "$SARIF_DIR" -type f -name '*.sarif' -print0)
+          if [[ ${#SARIF_FILES[@]} -eq 0 ]]; then
+            echo "No SARIF result files were produced."
+            exit 0
+          fi
+          for file in "${SARIF_FILES[@]}"; do
+            echo "Findings in $file:"
+            jq -r '
+              .runs[] as $run |
+              $run.results[]? |
+              [
+                (.ruleId // "unknown-rule"),
+                (.level // "unknown-level"),
+                (.message.text // "No message"),
+                (.locations[0].physicalLocation.artifactLocation.uri // "unknown-file"),
+                ((.locations[0].physicalLocation.region.startLine // 0) | tostring)
+              ] | @tsv
+            ' "$file"
+          done
