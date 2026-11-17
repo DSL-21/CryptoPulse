@@ -2,65 +2,80 @@
 
 **Open-source Android cryptocurrency market intelligence.**
 
-CryptoPulse brings public exchange market data, transparent market scanners, an exchange-specific trade tape and a local watchlist into one Android app.
+CryptoPulse combines public centralized-exchange market data, a transparent market scanner, DEX pair discovery, a local watchlist and one-shot price alerts in a native Android app.
 
-The project is built around one rule: **the user should not need to create an exchange account, register for a data provider, or supply an API key just to view public market information.**
+## Stable release
 
-## Current development status
+**Version:** 1.0.0  
+**Application ID:** `com.dsl21.cryptopulse`  
+**Minimum Android:** 8.0 (API 26)  
+**Target Android:** API 36
 
-**Version:** 0.1.0 · **Status:** Initial development build
+Download the APK and SHA-256 checksum from [GitHub Releases](https://github.com/DSL-21/CryptoPulse/releases/latest).
 
-The first development slice includes:
+> The release APK is debug-signed for direct installation. It is suitable for sideloading and testing, but it is not a Play Store production-signed package. GitHub Actions uses an ephemeral debug signing key, so installing a future build over this copy may require uninstalling the previous version first.
 
-- Dark Android interface built with Kotlin and Jetpack Compose.
-- Binance Spot public 24-hour market statistics for a curated list of USDT pairs.
-- Kraken public ticker snapshots for selected USD markets.
-- Revolut X public recent-trades feed and BTC-USD top-of-book summary.
-- Rule-based scanner observations for large 24-hour moves, high reported volume and wide trading ranges.
-- Local watchlist storage (no account or cloud sync).
-- 48 hourly Binance candles on the asset detail screen.
-- Per-source availability status and a 60-second refresh interval.
+## Features
 
-Some feeds provide different types of data. Revolut X's public endpoints do not provide an unauthenticated all-market ticker: CryptoPulse uses only the documented public recent-trades and order-book endpoints. Read [DATA_SOURCES.md](docs/DATA_SOURCES.md) for details.
+### Market
+- Binance Spot rolling 24-hour ticker snapshots for ten tracked USDT pairs.
+- Kraken public ticker snapshots for selected USD pairs.
+- Exchange-specific quote-currency display; USD and USDT stay separate.
+- Market heatmap, asset search, gainers/losers filters and local watchlist.
 
-## Build
+### Scanner
+- Positive/negative price-momentum observations.
+- High reported exchange-volume observations.
+- Wide 24-hour range observations.
+- Relative hourly-volume spikes using completed Binance 1-hour candles.
+- Transparent thresholds and explanations.
 
-The project uses Android Gradle Plugin 8.13.2, Kotlin 2.4.21, Gradle 8.13 and Jetpack Compose BOM 2026.06.01.
+### DEX Radar
+- Recent token profiles from DEX Screener's public API.
+- Best available pair per profile, selected by reported liquidity.
+- Chain, DEX, price changes, volume, liquidity, pair age and provider-reported active boosts.
+- Sort by hourly volume, hourly price change or liquidity.
+- Low-liquidity and very-new-pair cautions.
 
-You need:
+DEX Radar is a limited discovery sample, not a complete on-chain token index or a token-safety assessment.
 
-- JDK 17 or newer
-- Android SDK Platform 36
-- Android build tools 36.0.0
-- Gradle 8.13
+### Revolut X public tape
+- Latest public trades across pairs.
+- Public BTC/USD top-of-book bid, ask and spread.
+- No Revolut login or personal API key.
 
-Build and test from the repository root:
+### Local price alerts
+- One-shot above/below price conditions for tracked assets.
+- Local storage; no account or cloud sync.
+- Android notifications when permission is granted.
 
-\`\`\`bash
-gradle --no-daemon :app:testDebugUnitTest
-gradle --no-daemon :app:assembleDebug
-\`\`\`
+Price alerts are checked on the market refresh cycle while CryptoPulse is open. Background monitoring after the app is closed is not included.
 
-The APK is created at:
+## Public data sources
 
-\`\`\`
-app/build/outputs/apk/debug/app-debug.apk
-\`\`\`
+- Binance Spot public market-data REST API.
+- Kraken public REST API.
+- Revolut X public recent-trades and order-book endpoints.
+- DEX Screener public token-profile and token-pair endpoints.
 
-GitHub Actions runs unit tests and builds the debug APK on pushes and pull requests. Build artifacts are attached to the workflow run. Pushing a version tag such as \`v0.1.0\` creates a GitHub Release with the APK.
+See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for endpoint details, limits and interpretation differences.
 
-## Data sources
+## Build from source
 
-- [Binance Spot public market data](https://github.com/binance/binance-spot-api-docs/blob/master/faqs/market_data_only.md)
-- [Kraken public REST API](https://docs.kraken.com/api/docs/rest-api/get-ticker-information/)
-- [Revolut X public market data](https://developer.revolut.com/docs/guides/crypto-exchange/get-started/make-your-first-request)
+Requirements: JDK 17, Android SDK Platform 36 and Build Tools 36.0.0. Gradle 8.13 is used by the CI workflow and can be installed through Android Studio or Gradle's official distribution.
 
-No user API keys, accounts, or paid market-data subscriptions are required by the current app.
+Build:
+```bash
+gradle --no-daemon lintDebug testDebugUnitTest assembleDebug
+```
 
-## Important
+APK output: `app/build/outputs/apk/debug/app-debug.apk`.
 
-CryptoPulse is a market-monitoring and educational tool. Scanner observations are descriptive rule-based signals, not financial advice or trading recommendations. Exchange prices, volumes, market coverage and update frequency can differ.
+## Known limitations
+- Kraken's percentage is change since UTC day open, not a rolling 24-hour return; its quote-notional volume is estimated.
+- USD and USDT stay separate; exchange volumes are not combined into total-market volume.
+- DEX discovery is limited to recent profiles.
+- Price alerts are checked while the app is open.
+- GitHub APK is debug-signed, not Play Store production-signed.
 
-## License
-
-MIT. See [LICENSE](LICENSE).
+MIT License.
