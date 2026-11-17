@@ -1,5 +1,11 @@
 package com.dsl21.cryptopulse.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,55 +37,101 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dsl21.cryptopulse.data.AlertDirection
+import com.dsl21.cryptopulse.data.AlertEngine
+import com.dsl21.cryptopulse.data.AlertNotifier
 import com.dsl21.cryptopulse.data.AssetQuote
+import com.dsl21.cryptopulse.data.DexPair
+import com.dsl21.cryptopulse.data.DexScreenerRepository
 import com.dsl21.cryptopulse.data.MarketSnapshot
+import com.dsl21.cryptopulse.data.PriceAlertRule
+import com.dsl21.cryptopulse.data.PriceAlertStore
 import com.dsl21.cryptopulse.data.PublicMarketRepository
 import com.dsl21.cryptopulse.data.WatchlistStore
+import com.dsl21.cryptopulse.ui.screens.AlertsScreen
 import com.dsl21.cryptopulse.ui.screens.AssetDetailScreen
+import com.dsl21.cryptopulse.ui.screens.DexRadarScreen
 import com.dsl21.cryptopulse.ui.screens.MarketScreen
 import com.dsl21.cryptopulse.ui.screens.ScannerScreen
 import com.dsl21.cryptopulse.ui.screens.TradeTapeScreen
 import com.dsl21.cryptopulse.ui.screens.WatchlistScreen
+import com.dsl21.cryptopulse.ui.theme.CryptoPulseTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 private enum class AppTab(val label: String, val glyph: String) {
     MARKET("Market", "◈"),
     SCANNER("Scanner", "⌕"),
+    DEX("DEX", "◇"),
     TAPE("Tape", "≋"),
+    ALERTS("Alerts", "!"),
     WATCHLIST("Saved", "☆")
 }
 
 @Composable
 fun CryptoPulseApp() {
     val context = LocalContext.current
-    val repository = remember { PublicMarketRepository() }
+    val marketRepository = remember { PublicMarketRepository() }
+    val dexRepository = remember { DexScreenerRepository() }
     val watchlistStore = remember(context) { WatchlistStore(context) }
+    val alertStore = remember(context) { PriceAlertStore(context) }
     val scope = rememberCoroutineScope()
 
     var snapshot by remember { mutableStateOf(MarketSnapshot.empty()) }
+    var dexPairs by remember { mutableStateOf(emptyList<DexPair>()) }
+    var watchlist by remember { mutableStateOf(watchlistStore.load()) }
+    var alertRules by remember { mutableStateOf(alertStore.load()) }
     var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isDexLoading by remember { mutableStateOf(false) }
+    var marketError by remember { mutableStateOf<String?>(null) }
+    var dexError by remember { mutableStateOf<String?>(null) }
     var selectedTab by remember { mutableStateOf(AppTab.MARKET) }
     var selectedSymbol by remember { mutableStateOf<String?>(null) }
     var history by remember { mutableStateOf(emptyList<Double>()) }
     var isLoadingHistory by remember { mutableStateOf(false) }
-    var watchlist by remember { mutableStateOf(watchlistStore.load()) }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { }
 
     val refreshMarket: () -> Unit = {
         scope.launch {
             if (!isLoading) {
                 isLoading = true
-                errorMessage = null
+                marketError = null
                 try {
-                    snapshot = repository.refresh()
-                    if (snapshot.quotes.isEmpty()) {
-                        errorMessage = "Market feeds did not return tracked assets. Check your connection."
+                    val refreshed = marketRepository.refresh()
+                    snapshot = refreshed
+                    if (refreshed.quotes.isEmpty()) {
+                        marketError = "Market feeds did not return tracked assets. Check your connection."
+                    }
+
+                    val hits = AlertEngine.evaluate(alertRules, refreshed.quotes)
+                    if (hits.isNotEmpty()) {
+                        alertRules = alertStore.markTriggered(hits.map { it.rule.id }.toSet())
+                        hits.forEach { hit -> AlertNotifier.notifyPriceAlert(context, hit) }
                     }
                 } catch (exception: Exception) {
-                    errorMessage = exception.message ?: "Unable to refresh market data."
+                    marketError = exception.message ?: "Unable to refresh market data."
                 } finally {
                     isLoading = false
+                }
+            }
+        }
+    }
+
+    val refreshDex: () -> Unit = {
+        scope.launch {
+            if (!isDexLoading) {
+                isDexLoading = true
+                dexError = null
+                try {
+                    dexPairs = dexRepository.refresh()
+                } catch (exception: Exception) {
+                    dexError = exception.message ?: "Unable to refresh DEX data."
+                } finally {
+                    isDexLoading = false
                 }
             }
         }
@@ -88,8 +140,16 @@ fun CryptoPulseApp() {
     LaunchedEffect(Unit) {
         refreshMarket()
         while (true) {
-            delay(60_000)
+            delay(60_000L)
             refreshMarket()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        refreshDex()
+        while (true) {
+            delay(5 * 60_000L)
+            refreshDex()
         }
     }
 
@@ -98,13 +158,31 @@ fun CryptoPulseApp() {
         val asset = snapshot.quotes.firstOrNull { it.asset.symbol == symbol }?.asset
         if (asset != null) {
             isLoadingHistory = true
-            history = runCatching { repository.fetchHourlyCloses(asset) }.getOrDefault(emptyList())
+            history = runCatching {
+                marketRepository.fetchHourlyCloses(asset)
+            }.getOrDefault(emptyList())
             isLoadingHistory = false
         }
     }
 
     fun toggleWatch(symbol: String) {
         watchlist = watchlistStore.toggle(symbol)
+    }
+
+    fun addAlert(symbol: String, direction: AlertDirection, targetPrice: Double) {
+        val rule = PriceAlertRule(
+            id = UUID.randomUUID().toString(),
+            symbol = symbol,
+            direction = direction,
+            targetPrice = targetPrice
+        )
+        alertRules = alertStore.add(rule)
+
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     Scaffold(
@@ -116,8 +194,8 @@ fun CryptoPulseApp() {
                         NavigationBarItem(
                             selected = selectedTab == tab,
                             onClick = { selectedTab = tab },
-                            icon = { Text(tab.glyph, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
-                            label = { Text(tab.label, fontSize = 10.sp) },
+                            icon = { Text(tab.glyph, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                            label = { Text(tab.label, fontSize = 9.sp, maxLines = 1) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Color(0xFF07111F),
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -135,13 +213,21 @@ fun CryptoPulseApp() {
             AppHeader(
                 isLoading = isLoading,
                 isDetail = selectedSymbol != null,
-                onRefresh = refreshMarket,
+                onRefresh = { if (selectedTab == AppTab.DEX) refreshDex() else refreshMarket() },
                 onBack = { selectedSymbol = null }
             )
 
-            if (errorMessage != null) {
+            if (marketError != null && selectedTab != AppTab.DEX && selectedSymbol == null) {
                 Text(
-                    errorMessage.orEmpty(),
+                    marketError.orEmpty(),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (dexError != null && selectedTab == AppTab.DEX) {
+                Text(
+                    dexError.orEmpty(),
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.bodySmall
@@ -161,7 +247,10 @@ fun CryptoPulseApp() {
                             onToggleWatch = { selectedSymbol?.let(::toggleWatch) }
                         )
                     } else {
-                        Text("This asset is no longer in the current feed.", modifier = Modifier.padding(16.dp))
+                        Text(
+                            "This asset is not in the current market snapshot.",
+                            modifier = Modifier.padding(16.dp)
+                        )
                     }
                 } else {
                     when (selectedTab) {
@@ -174,7 +263,19 @@ fun CryptoPulseApp() {
                             onToggleWatch = ::toggleWatch
                         )
                         AppTab.SCANNER -> ScannerScreen(snapshot)
+                        AppTab.DEX -> DexRadarScreen(
+                            pairs = dexPairs,
+                            isLoading = isDexLoading,
+                            errorMessage = dexError,
+                            onRefresh = refreshDex
+                        )
                         AppTab.TAPE -> TradeTapeScreen(snapshot)
+                        AppTab.ALERTS -> AlertsScreen(
+                            quotes = snapshot.quotes,
+                            alerts = alertRules,
+                            onAddAlert = ::addAlert,
+                            onRemoveAlert = { id -> alertRules = alertStore.remove(id) }
+                        )
                         AppTab.WATCHLIST -> WatchlistScreen(
                             quotes = snapshot.quotes,
                             watchlist = watchlist,
@@ -203,7 +304,12 @@ private fun AppHeader(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Surface(modifier = Modifier.size(37.dp), shape = CircleShape, color = Color(0xFF153B36)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("CP", color = Color(0xFF62E6B5), fontWeight = FontWeight.Black, fontSize = 13.sp)
+                    Text(
+                        "CP",
+                        color = Color(0xFF62E6B5),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 13.sp
+                    )
                 }
             }
             Column(Modifier.padding(start = 10.dp)) {
@@ -220,6 +326,7 @@ private fun AppHeader(
                 )
             }
         }
+
         Surface(
             modifier = Modifier.clickable { if (isDetail) onBack() else onRefresh() },
             shape = CircleShape,
