@@ -25,14 +25,14 @@ Some feeds provide different types of data. Revolut X's public endpoints do not 
 
 ## Build
 
-The project uses Android Gradle Plugin 8.13.2, Kotlin 2.4.21, Gradle 8.13 and Jetpack Compose BOM 2026.09.00.
+The project uses Android Gradle Plugin 9.3.1, Kotlin 2.4.21, Gradle 9.6.0 and Jetpack Compose BOM 2026.09.00.
 
 You need:
 
 - JDK 17 or newer
-- Android SDK Platform 36
+- Android SDK Platform 37
 - Android build tools 36.0.0
-- Gradle 8.13
+- Gradle 9.6.0
 
 Build and test from the repository root:
 
