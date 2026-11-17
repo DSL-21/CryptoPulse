@@ -29,16 +29,15 @@ jobs:
         with:
           gradle-version: "9.9.1"
 
-      # GitHub's Ubuntu runner image already contains Android command-line tools.
-      # Avoid setup-android's deprecated sdkmanager "tools" package installation.
+      # The hosted Ubuntu image already contains Android command-line tools.
+      # Avoid setup-android's attempt to install the removed sdkmanager "tools" package.
       - name: Install Android SDK components
         shell: bash
         run: |
-          : "\${ANDROID_HOME:=/usr/local/lib/android/sdk}"
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          SDKMANAGER="$(find /usr/local/lib/android/sdk/cmdline-tools -type f -name sdkmanager | sort -V | tail -n 1)"
           if [ -z "$SDKMANAGER" ]; then
-            echo "Android sdkmanager not found under $ANDROID_HOME"
+            echo "Android sdkmanager not found"
             exit 1
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
