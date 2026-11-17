@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.dsl21.cryptopulse"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.dsl21.cryptopulse"
