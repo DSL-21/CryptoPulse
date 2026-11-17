@@ -56,13 +56,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # On successful builds from main, maintain the public v0.1.0 preview release.
+      # Create a real Git tag first. The following release action then publishes against that tag.
+      - name: Create v0.1.0 tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --tags origin refs/tags/v0.1.0 >/dev/null 2>&1; then
+            echo "Tag v0.1.0 already exists; keeping the existing tag."
+          else
+            git tag v0.1.0 "$GITHUB_SHA"
+            git push origin refs/tags/v0.1.0
+          fi
+
       - name: Publish CryptoPulse v0.1.0 preview release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.1.0
-          target_commitish: \${{ github.sha }}
           name: CryptoPulse v0.1.0 – Initial preview
           body: |
             ## CryptoPulse v0.1.0 – Initial preview
@@ -83,7 +93,7 @@ jobs:
           files: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Publish GitHub Release for version tags
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
