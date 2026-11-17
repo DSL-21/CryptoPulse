@@ -1,36 +1,45 @@
-# CryptoPulse public market data sources
+# CryptoPulse public data sources
 
-CryptoPulse is designed to work without user accounts, personal API keys, or a paid backend. It calls public market-data endpoints directly from the Android app.
+CryptoPulse accesses public market-data endpoints directly from the Android device. No user registration, personal API key, paid API subscription or app-owned server is required for the endpoints used in this release.
 
 ## Binance Spot
+Base URL: `https://data-api.binance.vision`
+- `GET /api/v3/ticker/24hr`: rolling 24-hour ticker for tracked USDT pairs.
+- `GET /api/v3/klines`: hourly candles for charts and relative-volume scanner.
 
-- Endpoint: \`https://data-api.binance.vision/api/v3/ticker/24hr\`
-- Purpose: 24-hour price change, last price, high, low and quote volume for a tracked set of USDT spot pairs.
-- Authentication: none for market-data-only endpoints.
-- Documentation: https://github.com/binance/binance-spot-api-docs/blob/master/faqs/market_data_only.md
+Official documentation:
+- https://github.com/binance/binance-spot-api-docs/blob/master/faqs/market_data_only.md
+- https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md
 
 ## Kraken
+Base URL: `https://api.kraken.com`
+- `GET /0/public/Ticker?pair=XBTUSD,ETHUSD,SOLUSD`
 
-- Endpoint: \`https://api.kraken.com/0/public/Ticker\`
-- Purpose: public ticker snapshots for BTC/USD, ETH/USD and SOL/USD where those pairs are returned by the exchange.
-- Authentication: none for public market-data endpoints.
-- Documentation: https://docs.kraken.com/api/docs/rest-api/get-ticker-information/
+This public endpoint requires no authentication. The `o` field is the opening price since UTC day start, while `h`, `l` and `v[1]` describe the last 24 hours. CryptoPulse labels percentage move as UTC-day change, not rolling 24h. Quote-notional volume is estimated from base volume multiplied by latest price.
+
+Official documentation:
+- https://docs.kraken.com/api/docs/rest-api/get-ticker-information/
 
 ## Revolut X
+Base URL: `https://revx.revolut.com/api/2.0`
+- `GET /public/last-trades`: latest 100 public trades.
+- `GET /public/order-book/BTC-USD`: public BTC/USD order book, up to five levels per side.
 
-- Recent public trades: \`https://revx.revolut.com/api/2.0/public/last-trades\`
-- BTC order book: \`https://revx.revolut.com/api/2.0/public/order-book/BTC-USD\`
-- Purpose: recent public trades and up to five price levels per side for the requested public order book.
-- Authentication: none for these documented public endpoints.
-- Important limitation: Revolut X's all-pairs \`/tickers\` endpoint is authenticated. CryptoPulse does not call it and does not claim that the public trade tape is a complete trade history or a full-market ticker feed.
-- Public rate limit documented by Revolut X: 20 requests per 10 seconds for public recent-trades and order-book endpoints.
-- Documentation: https://developer.revolut.com/docs/guides/crypto-exchange/get-started/make-your-first-request
-- API reference: https://github.com/revolut-engineering/revolut-x-api/blob/master/revolut-x-api-for-llm.md
+The documented public rate limit is 20 requests per 10 seconds. CryptoPulse does not call private account, portfolio or authenticated ticker endpoints.
 
-## Data interpretation
+Official documentation:
+- https://developer.revolut.com/docs/guides/crypto-exchange/get-started/make-your-first-request
+- https://github.com/revolut-engineering/revolut-x-api/blob/master/revolut-x-api-for-llm.md
 
-- Binance tracked spot prices are quoted in USDT. Kraken prices are quoted in USD. The app keeps the quote currency visible and does not pretend these are identical instruments or a consolidated global price.
-- Kraken's public ticker reports base-asset volume. The initial implementation estimates a USD notional by multiplying the reported base volume by the last price. That estimate is not an exchange-reported quote-volume field.
-- Exchange volume is venue-specific. The app does not add the same asset's volume across venues and label it as global market volume.
-- Scanner observations are transparent rules based on reported 24-hour statistics. They are not price predictions, financial advice, or buy/sell recommendations.
-- Public endpoints can change, become unavailable, or enforce stricter rate limits. The UI reports source availability and the app uses bounded refresh intervals.
+## DEX Screener
+Base URL: `https://api.dexscreener.com`
+- `GET /token-profiles/latest/v1`: recent token profiles.
+- `GET /token-pairs/v1/{chainId}/{tokenAddress}`: pairs for a profile token.
+
+CryptoPulse samples a limited number of recent profiles, loads their pairs and selects the pair with the highest provider-reported USD liquidity. The feed refreshes every five minutes. This is not a full-chain index or token-safety assessment.
+
+Official documentation:
+- https://docs.dexscreener.com/api/reference
+
+## Limitations
+USD and USDT quotes stay separate. Exchange volumes are venue-specific. Kraken quote-notional volume is an estimate. A DEX profile, paid boost or high FDV is not evidence a token is safe or legitimate. Public APIs may be temporarily unavailable.
